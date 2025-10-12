@@ -22,7 +22,6 @@ export default function NavBar() {
         <Link to="/" className="text-xl font-bold text-indigo-600">BackStack Adoção</Link>
         <nav className="flex items-center gap-2">
           <Link className={linkClass('/animais')} to="/animais">Animais</Link>
-          <Link className={linkClass('/questionario')} to="/questionario">Questionário</Link>
           <Link className={linkClass('/doacoes')} to="/doacoes">Doações</Link>
           {admin && <Link className={linkClass('/admin/animais')} to="/admin/animais">Admin</Link>}
           {!logged && <Link className={linkClass('/login')} to="/login">Entrar</Link>}

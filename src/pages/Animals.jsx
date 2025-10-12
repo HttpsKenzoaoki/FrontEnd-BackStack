@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { listAnimals, createAdoption, isLoggedIn, isAdmin, adminCreateAnimal, adminGetAnimal } from '../lib/api.js';
+import { listAnimals, createAdoption, isLoggedIn, isAdmin, adminCreateAnimal, adminGetAnimal, getTutorById } from '../lib/api.js';
+import QuestionnaireModal from '../components/QuestionnaireModal.jsx';
 
 export default function Animals() {
   const [animals, setAnimals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [info, setInfo] = useState('');
   const [erro, setErro] = useState('');
+  const [hasQuestionnaire, setHasQuestionnaire] = useState(true);
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+
   const [newAnimal, setNewAnimal] = useState({
     nome: 'Rex',
     especie: 'Cão',
@@ -16,28 +20,62 @@ export default function Animals() {
     descricao: 'Cão dócil e brincalhão'
   });
 
-  async function load() {
+  async function loadAnimals() {
     setLoading(true); setErro('');
     try {
       const data = await listAnimals();
-      setAnimals(data);
-    } catch (err) {
+      setAnimals(Array.isArray(data) ? data : []);
+    } catch {
       setErro('Erro ao carregar animais');
+      setAnimals([]);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, []);
+  async function checkQuestionnaire() {
+    if (!isLoggedIn()) {
+      setHasQuestionnaire(false);
+      return;
+    }
+    try {
+      const tutorId = localStorage.getItem('tutorId');
+      if (!tutorId) {
+        setHasQuestionnaire(false);
+        return;
+      }
+      const tutor = await getTutorById(tutorId);
+      setHasQuestionnaire(!!tutor?.questionario);
+    } catch {
+      setHasQuestionnaire(false);
+    }
+  }
+
+  useEffect(() => { 
+    loadAnimals(); 
+    checkQuestionnaire();
+  }, []);
 
   async function handleAdopt(id) {
-    setInfo('');
+    setInfo(''); setErro('');
+    if (!isLoggedIn()) {
+      setErro('Você precisa estar logado para adotar.');
+      return;
+    }
+    if (!hasQuestionnaire) {
+      setShowQuestionnaire(true);
+      return;
+    }
     try {
       const res = await createAdoption(id);
-      setInfo(`Pedido de adoção criado! ID: ${res?.id || '(verifique no backend)'}`);
+      setInfo(`Pedido de adoção criado! ID: ${res?.id || '(veja logs do backend)'}`);
     } catch (err) {
-      setInfo('');
-      setErro(err?.data?.erro || 'Erro ao criar pedido');
+      const msg = err?.data?.erro || 'Erro ao criar pedido';
+      setErro(msg);
+      // Se o backend informar que falta questionário, abrimos o modal
+      if (String(msg).toLowerCase().includes('questionário')) {
+        setShowQuestionnaire(true);
+      }
     }
   }
 
@@ -48,9 +86,9 @@ export default function Animals() {
       await adminCreateAnimal(newAnimal);
       setInfo('Animal cadastrado!');
       setNewAnimal({ ...newAnimal, nome: `${newAnimal.nome} *` });
-      await load();
+      await loadAnimals();
     } catch (err) {
-      setErro(err?.data?.erro || 'Erro ao cadastrar animal (verifique se está logado como admin)');
+      setErro(err?.data?.erro || 'Erro ao cadastrar animal (verifique login como admin)');
     }
   }
 
@@ -59,20 +97,27 @@ export default function Animals() {
     if (!id) return;
     try {
       const data = await adminGetAnimal(id);
-      alert(`Animal: ${data?.nome || 'sem nome'}\nEspecie: ${data?.especie}\nPorte: ${data?.porte}`);
+      alert(`Animal: ${data?.nome || 'sem nome'}\nEspécie: ${data?.especie}\nPorte: ${data?.porte}`);
     } catch (err) {
       alert(err?.data?.erro || 'Erro ao buscar (somente admin)');
     }
   }
 
+  const list = Array.isArray(animals) ? animals : [];
+
   return (
     <div className="space-y-8">
       <section>
         <h1 className="text-3xl font-bold mb-2">Animais para Adoção</h1>
-        <p className="text-gray-600">Clique para solicitar adoção (é necessário estar logado).</p>
+        {!hasQuestionnaire && isLoggedIn() && (
+          <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3 mb-3">
+            Complete o questionário para solicitar adoção.
+            <button className="ml-2 underline" onClick={() => setShowQuestionnaire(true)}>Abrir questionário</button>
+          </div>
+        )}
         {loading ? <p>Carregando...</p> : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {animals.map(a => (
+            {list.map(a => (
               <div key={a.id} className="bg-white rounded shadow p-4 flex flex-col">
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold">{a.nome}</h3>
@@ -134,6 +179,12 @@ export default function Animals() {
           </form>
         </section>
       )}
+
+      <QuestionnaireModal
+        open={showQuestionnaire}
+        onClose={() => setShowQuestionnaire(false)}
+        onSubmitted={() => { setHasQuestionnaire(true); }}
+      />
     </div>
   );
 }

@@ -2,3 +2,5 @@
 ## EPiServer Files
 ######################
 *License.config
+.env
+/node_modules
